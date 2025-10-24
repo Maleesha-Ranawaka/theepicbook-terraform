@@ -1,0 +1,63 @@
+#cloud-config
+package_update: true
+packages:
+  - nginx
+  - nodejs
+  - npm
+  - git
+  - mysql-client
+  - mysql-server
+
+runcmd:
+  - git clone https://github.com/pravinmishraaws/theepicbook.git /home/azureuser/theepicbook
+  - cd /home/azureuser/theepicbook && npm install
+  - sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root'; FLUSH PRIVILEGES;"
+  - |
+    cat <<EOF > /home/azureuser/theepicbook/config/config.json
+    {
+      "development": {
+        "username": "root",
+        "password": "root",
+        "database": "bookstore",
+        "host": "127.0.0.1",
+        "dialect": "mysql",
+        "port": 3306
+      },
+      "test": {
+        "username": "root",
+        "password": "root",
+        "database": "database_test",
+        "host": "127.0.0.1",
+        "dialect": "mysql",
+        "port": 3306
+      },
+      "production": {
+        "use_env_variable": "JAWSDB_URL",
+        "dialect": "mysql",
+        "port": 3306
+      }
+    }
+    EOF
+  - sudo mysql -u root -proot -e "CREATE DATABASE IF NOT EXISTS bookstore;"
+  - sudo mysql -u root -proot -e "SHOW DATABASES;"
+  - sudo mysql -u root -proot bookstore < /home/azureuser/theepicbook/db/BuyTheBook_Schema.sql
+  - sudo mysql -u root -proot bookstore < /home/azureuser/theepicbook/db/author_seed.sql
+  - sudo mysql -u root -proot bookstore < /home/azureuser/theepicbook/db/books_seed.sql
+  - |
+    cat <<EOF | sudo tee /etc/nginx/sites-available/default
+    server {
+        listen 80;
+        server_name _;
+
+        location / {
+            proxy_pass http://localhost:8080;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade \$http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host \$host;
+            proxy_cache_bypass \$http_upgrade;
+        }
+    }
+    EOF
+  - sudo systemctl restart nginx
+  - cd /home/azureuser/theepicbook && nohup node server.js > /dev/null 2>&1 &
